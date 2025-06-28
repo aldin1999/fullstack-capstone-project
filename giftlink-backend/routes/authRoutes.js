@@ -9,7 +9,7 @@ const dotenv = require('dotenv');
 const pino = require('pino');  // Import Pino logger
 
 dotenv.config(); // Load environment variables
-
+console.log('JWT_SECRET:', process.env.JWT_SECRET);
 // Step 1 - Task 3: Create a Pino logger instance
 const logger = pino();
 
@@ -17,6 +17,11 @@ const logger = pino();
 const JWT_SECRET = process.env.JWT_SECRET;
 
 router.post('/register', async (req, res) => {
+        console.log('POST /api/auth/register hit with body:', req.body);
+        if (!req.body.email || !req.body.password || !req.body.firstName || !req.body.lastName) {
+            return res.status(400).json({ error: 'Missing required fields' });
+          }
+        
     try {
         // Task 1: Connect to giftsdb in MongoDB
         const db = await connectToDatabase();
