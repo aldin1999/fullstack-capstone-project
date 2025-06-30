@@ -5,7 +5,7 @@ const connectToDatabase = require('../models/db');
 const router = express.Router();
 const dotenv = require('dotenv');
 const pino = require('pino');  
-dotenv.config();
+const { body, validationResult } = require('express-validator');
 
 const logger = pino();  
 
@@ -95,5 +95,75 @@ router.post('/login', async (req, res) => {
         return res.status(500).json({ error: 'Internal server error', details: e.message });
       }
 });
+
+router.put(
+  '/update',
+  [
+    // Task 1: Use the `body`,`validationResult` from `express-validator` for input validation
+    body('firstName', 'First name is required').notEmpty(),
+    body('lastName', 'Last name is required').notEmpty(),
+    body('password', 'Password must be at least 6 characters long').isLength({ min: 6 }),
+  ],
+  async (req, res) => {
+     // Task 2: Validate the input using `validationResult` and return approiate message if there is an error.
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      logger.error('Validation errors in update request', errors.array());
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+         // Task 3: Check if `email` is present in the header and throw an appropriate error message if not present.
+      const email = req.headers.email;
+      if (!email) {
+        logger.error('Email not found in the request headers');
+        return res.status(400).json({ error: 'Email not found in the request headers' });
+      }
+
+       // Task 4: Connect to MongoDB
+      const db = await connectToDatabase();
+      const collection = db.collection('users');
+
+        // Task 5: find user credentials in database
+      const existingUser = await collection.findOne({ email });
+      if (!existingUser) {
+        logger.error('User not found');
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const salt = await bcryptjs.genSalt(10);
+      const hashedPassword = await bcryptjs.hash(req.body.password, salt);
+
+      const updatedFields = {
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        password: hashedPassword,
+        updatedAt: new Date(),
+      };
+
+        // Task 6: update user credentials in database
+    const updatedUser = await collection.findOneAndUpdate(
+        { email },
+        { $set: updatedFields },
+        { returnDocument: 'after' }
+        );
+
+        // Task 7: create JWT authentication using secret key from .env file
+      const payload = {
+        user: {
+          id: updatedUser.value._id.toString(),
+        },
+      };
+      const authtoken = jwt.sign(payload, JWT_SECRET);
+
+      logger.info('User updated successfully');
+      return res.json({ authtoken });
+
+    } catch (e) {
+      logger.error('Internal server error:', e);
+      return res.status(500).send('Internal server error');
+    }
+  }
+);
 
 module.exports = router;
